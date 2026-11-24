@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Kitöltés – Időpontszavazó</title>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;600;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared.css">
+</head>
+<body><div class="wrap">
+<h1 id="ttl">Időpontszavazó</h1>
+<p class="mute" id="sub">Betöltés…</p>
+<div id="note" style="margin-top:16px"></div>
+<section id="form" class="hide">
+  <p id="fd"></p>
+  <div class="field"><label for="nm">Neved</label><input type="text" id="nm" autocomplete="name" maxlength="80"></div>
+  <p style="font-weight:600;margin-bottom:4px">Jelöld be, mely napok felelnek meg neked:</p>
+  <div id="opts"></div>
+  <div class="actions"><button class="b" id="send">Válaszok elküldése</button></div>
+</section>
+</div>
+<script src="shared.js"></script>
+<script>
+const id=location.hash.slice(1);
+let poll=null;
+(async()=>{
+  try{
+    if(!id)throw 0;
+    const r=await fetch('/api',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'getPoll',id})});
+    poll=await r.json();if(!poll.dates)throw 0;
+    $('#ttl').textContent=poll.title||'Időpontszavazó';
+    $('#sub').textContent='Jelöld be a neked megfelelő napokat, majd küldd el a válaszodat.';
+    $('#fd').textContent=poll.desc||'';$('#fd').classList.toggle('hide',!poll.desc);
+    $('#opts').innerHTML=poll.dates.map(d=>`<label class="item pick">${tile(d)}<span class="t">${fmt(d).long}</span><input type="checkbox" value="${d}"><span class="box"></span></label>`).join('');
+    $('#form').classList.remove('hide');
+  }catch(e){
+    $('#ttl').textContent='Ez a link nem érvényes';
+    $('#sub').textContent='Kérd el újra a kitöltési linket attól, aki a kérdőívet készítette.';
+  }
+})();
+$('#send').onclick=async()=>{
+  const name=$('#nm').value.trim();
+  const dates=[...document.querySelectorAll('#opts input:checked')].map(i=>i.value);
+  if(!name)return note('Írd be a neved, hogy a szervező tudja, ki válaszolt.',1);
+  if(!dates.length)return note('Jelölj be legalább egy dátumot.',1);
+  $('#send').disabled=true;
+  try{
+    const r=await(await fetch('/api',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'submit',poll:poll.id,name,dates})})).json();
+    if(!r.ok)throw 0;
+    $('#form').classList.add('hide');
+    note('Köszönjük, '+esc(name)+'! A válaszodat elküldtük. Ha meggondolod magad, ugyanezen a néven újra szavazhatsz.');
+  }catch(e){$('#send').disabled=false;note('A válasz nem ment el. Ellenőrizd az internetkapcsolatot, és próbáld újra.',1)}
+};
+</script>
+</body></html>

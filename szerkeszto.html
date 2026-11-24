@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Szerkesztés – Időpontszavazó</title>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;600;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared.css">
+</head>
+<body><div class="wrap">
+<h1>Időpontszavazó</h1>
+<nav><a href="szerkeszto.html" aria-current="page">Szerkesztés</a><a href="osszesites.html">Összesítés</a><a href="kitoltes.html" id="fl">Kitöltés</a></nav>
+<div id="gate"></div>
+<div id="main" class="hide">
+  <div id="note"></div>
+  <section>
+    <div class="field"><label for="sel">Meglévő kérdőív megnyitása</label><select id="sel"><option value="">Új kérdőív</option></select></div>
+    <div class="field"><label for="pt">Kérdőív címe</label><input type="text" id="pt" placeholder="pl. Csapatépítő hétvége"></div>
+    <div class="field"><label for="pd">Leírás (nem kötelező)</label><textarea id="pd"></textarea></div>
+  </section>
+  <section>
+    <h2>Időpontok</h2>
+    <div class="row"><div><label for="nd">Új dátum</label><input type="date" id="nd"></div><button class="b" id="addD">Dátum hozzáadása</button></div>
+    <div class="row" style="margin-top:12px"><div><label for="d1">Vagy időszak (minden nap)</label><div style="display:flex;gap:8px"><input type="date" id="d1" aria-label="Kezdő nap"><input type="date" id="d2" aria-label="Utolsó nap"></div></div><button class="b alt" id="addR">Időszak hozzáadása</button></div>
+    <div id="dlist" style="margin-top:14px"></div>
+  </section>
+  <div class="actions">
+    <button class="b" id="save">Mentés</button>
+    <button class="b alt" id="copy">Mentés és kitöltési link másolása</button>
+    <button class="b del" id="out">Kilépés</button>
+  </div>
+</div></div>
+<script src="shared.js"></script>
+<script>
+let poll=lsGet('cur')||{id:rid(),title:'',desc:'',dates:[]};
+const keep=()=>lsSet('cur',poll);
+gate(async()=>{render();loadList()});
+
+async function loadList(){
+  try{const l=await aget({action:'list'});
+    $('#sel').innerHTML='<option value="">Új kérdőív</option>'+l.map(p=>`<option value="${esc(p.id)}">${esc(p.title||'Névtelen')} (${p.dates.length} nap)</option>`).join('');
+    $('#sel').value=l.some(p=>p.id===poll.id)?poll.id:'';
+    $('#sel').onchange=e=>{poll=l.find(p=>p.id===e.target.value)||{id:rid(),title:'',desc:'',dates:[]};keep();render()};
+  }catch(e){if(e.message==='auth')location.reload()}}
+function render(){
+  if(adm.get()&&poll.dates.length)$('#fl').href=fillLink(poll);
+  $('#pt').value=poll.title;$('#pd').value=poll.desc||'';
+  const l=$('#dlist');
+  l.innerHTML=poll.dates.length?poll.dates.map(d=>`<div class="item">${tile(d)}<div class="t">${fmt(d).long}</div><button class="b del" data-rm="${d}" aria-label="${fmt(d).long} törlése">Törlés</button></div>`).join(''):'<p class="mute">Még nincs dátum. Válassz egyet fent, és add hozzá.</p>';
+  l.querySelectorAll('[data-rm]').forEach(b=>b.onclick=()=>{poll.dates=poll.dates.filter(x=>x!==b.dataset.rm);keep();render()});
+}
+function addDates(a){a.forEach(d=>{if(!poll.dates.includes(d))poll.dates.push(d)});poll.dates.sort();keep();render()}
+$('#addD').onclick=()=>{const v=$('#nd').value;if(!v)return note('Válassz ki egy dátumot a hozzáadáshoz.',1);addDates([v]);$('#nd').value='';note('')};
+$('#addR').onclick=()=>{
+  const a=$('#d1').value,b=$('#d2').value;
+  if(!a||!b||b<a)return note('Add meg az időszak első és utolsó napját (az utolsó nap nem lehet korábbi).',1);
+  const out=[];for(let d=new Date(a+'T12:00:00');d<=new Date(b+'T12:00:00')&&out.length<62;d.setDate(d.getDate()+1))out.push(d.toISOString().slice(0,10));
+  addDates(out);note('')};
+$('#pt').oninput=e=>{poll.title=e.target.value;keep()};
+$('#pd').oninput=e=>{poll.desc=e.target.value;keep()};
+async function save(){
+  if(!poll.title.trim()){note('Adj címet a kérdőívnek.',1);return false}
+  if(!poll.dates.length){note('Adj meg legalább egy dátumot.',1);return false}
+  try{const r=await apost({action:'savePoll',poll});if(!r.ok)throw 0;note('A kérdőív elmentve.');loadList();return true}
+  catch(e){if(e.message==='auth')location.reload();else note('A mentés nem sikerült. Próbáld újra egy perc múlva, vagy nézd meg a Netlify Functions naplóját.',1);return false}}
+$('#save').onclick=save;
+$('#copy').onclick=async()=>{
+  if(!await save())return;
+  const url=fillLink(poll);
+  try{await navigator.clipboard.writeText(url);note('Elmentve, és a kitöltési link a vágólapra került. Ezt küldd el a válaszolóknak.')}catch(e){prompt('Másold ki a linket:',url)}};
+$('#out').onclick=()=>{adm.clear();location.reload()};
+</script>
+</body></html>

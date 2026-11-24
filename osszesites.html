@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Összesítés – Időpontszavazó</title>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;600;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared.css">
+</head>
+<body><div class="wrap">
+<h1>Időpontszavazó</h1>
+<nav><a href="szerkeszto.html">Szerkesztés</a><a href="osszesites.html" aria-current="page">Összesítés</a><a href="kitoltes.html" id="fl">Kitöltés</a></nav>
+<div id="gate"></div>
+<div id="main" class="hide">
+  <div id="note"></div>
+  <section>
+    <div class="field"><label for="sel">Kérdőív</label><select id="sel"></select></div>
+    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap"><h2 id="rt">Összesítés</h2><span class="mute" id="rc"></span></div>
+    <div id="rlist"></div>
+    <div class="actions">
+      <button class="b alt" id="refresh">Frissítés</button>
+      <button class="b alt" id="csv">Exportálás (CSV)</button>
+      <button class="b del" id="out">Kilépés</button>
+    </div>
+  </section>
+</div></div>
+<script src="shared.js"></script>
+<script>
+let polls=[],poll=null,rows=[];
+gate(async()=>{
+  try{polls=await aget({action:'list'})}catch(e){return location.reload()}
+  if(!polls.length){$('#rlist').innerHTML='<p class="mute">Még nincs elmentett kérdőív. Hozz létre egyet a Szerkesztés fülön.</p>';return}
+  $('#sel').innerHTML=polls.map(p=>`<option value="${esc(p.id)}">${esc(p.title||'Névtelen')}</option>`).join('');
+  const cur=lsGet('cur');if(cur&&polls.some(p=>p.id===cur.id))$('#sel').value=cur.id;
+  $('#sel').onchange=load;load();
+});
+async function load(){
+  poll=polls.find(p=>p.id===$('#sel').value);
+  try{const r=await aget({action:'results',poll:poll.id});
+    const m=new Map();r.forEach(x=>m.set(x.name,x));rows=[...m.values()];render();note('')}
+  catch(e){if(e.message==='auth')location.reload();else note('Nem sikerült lekérni a válaszokat.',1)}
+  $('#fl').href=fillLink(poll);
+}
+function render(){
+  $('#rt').textContent='Összesítés';$('#rc').textContent=rows.length+' válaszoló';
+  const cnt=Object.fromEntries(poll.dates.map(d=>[d,rows.filter(r=>r.dates.includes(d))]));
+  const max=Math.max(0,...poll.dates.map(d=>cnt[d].length));
+  $('#rlist').innerHTML=(rows.length?'':'<p class="mute">Még nem érkezett válasz.</p>')+poll.dates.map(d=>{const n=cnt[d].length;
+    return `<div class="item ${n&&n===max?'best':''}">${tile(d)}<div class="t"><div>${fmt(d).long}</div><div class="bar"><div style="width:${max?n/max*100:0}%"></div></div><div class="names">${cnt[d].map(r=>esc(r.name)).join(', ')||'Még nem szavazott rá senki'}</div></div><div class="cnt" aria-label="${n} szavazat">${n}</div></div>`}).join('');
+}
+$('#refresh').onclick=()=>poll&&load();
+$('#csv').onclick=()=>{if(!poll)return;
+  const q=s=>'"'+String(s).replace(/"/g,'""')+'"';
+  const lines=[['Név',...poll.dates],...rows.map(r=>[r.name,...poll.dates.map(d=>r.dates.includes(d)?1:0)]),['Összesen',...poll.dates.map(d=>rows.filter(r=>r.dates.includes(d)).length)]];
+  download('osszesites.csv','\ufeff'+lines.map(l=>l.map(q).join(';')).join('\n'),'text/csv')};
+$('#out').onclick=()=>{adm.clear();location.reload()};
+</script>
+</body></html>
